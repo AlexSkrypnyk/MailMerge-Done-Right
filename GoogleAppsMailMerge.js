@@ -190,17 +190,6 @@ function cancelSend() {
   return app;
 }
 
-/**
- * Cancel button callback.
- * Close app window and show cancellation toast.
- */
-function cancelSend() {
-  var app = UiApp.getActiveApplication();
-  app.close();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Mail Merge was cancelled. No messages were sent.', 'Mail Merge', 5);
-  return app;
-}
 
 /**
  * Close panel button callback.
