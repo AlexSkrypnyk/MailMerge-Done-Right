@@ -413,7 +413,8 @@ function sendEmails(e) {
       GmailApp.sendEmail(rowData.emailAddress, emailSubject, emailText, {
         attachments: templateAttachments,
         htmlBody: emailText,
-        inlineImages: inlineImages
+        inlineImages: inlineImages,
+        from: foundTemplate.getFrom().match(/[^ <>]+@[^ <>]+/)[0]
       });
       // Fill-in 'Email status' and 'Sent timestamp'.
       dataSheet.getRange(i + 2, dataSheet.getLastColumn() - 1).setValue("Email sent");
