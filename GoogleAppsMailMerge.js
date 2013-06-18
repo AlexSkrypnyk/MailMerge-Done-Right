@@ -317,7 +317,7 @@ function sendEmails(e) {
   var headers = headersRange.getValues();
   var emailColumnFound = false;
   for (i in headers[0]) {
-    if (headers[0][i] == "Email Address") {
+    if (headers[0][i].toLowerCase() == "email address" || headers[0][i].toLowerCase() == "email") {
       emailColumnFound = true;
     }
   }
