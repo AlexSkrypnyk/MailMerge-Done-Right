@@ -1,7 +1,7 @@
 /**
  * Google Apps Mail Merge script.
  * @author: Alex Skrypnyk (alex.designworks@gmail.com)
- * @version: 1.2
+ * @version: 1.3
  * License: GPL v2+ (http://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
  *
  * @description
@@ -36,6 +36,40 @@
  * https://github.com/alexdesignworks/MailMerge-Done-Right
  *
  */
+
+function dump(arr, level) {
+  var dumped_text = "";
+  if (!level) {
+    level = 0;
+  }
+
+  //The padding given at the beginning of the line.
+  var level_padding = "";
+  for (var j = 0; j < level + 1; j++) {
+    level_padding += "    ";
+  }
+
+  if (typeof(arr) == 'object') { //Array/Hashes/Objects
+    for (var item in arr) {
+      var value = arr[item];
+      if (typeof(value) == 'object') { //If it is an array,
+        dumped_text += level_padding + "'" + item + "' ...\n";
+        dumped_text += dump(value, level + 1);
+      }
+      else {
+        dumped_text += level_padding + "'" + item + "' => \"" + value + "\"\n";
+      }
+    }
+  }
+  else { //Stings/Chars/Numbers etc.
+    dumped_text = "===>" + arr + "<===(" + typeof(arr) + ")";
+  }
+  return dumped_text;
+}
+
+function log(txt) {
+  Logger.log(dump(txt));
+}
 
 var placeholder_start = '%%';
 var placeholder_finish = '%%';
@@ -135,18 +169,21 @@ function importFromGroup() {
  */
 function startMailMerge() {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
-  if (isValuesEmpty(doc.getActiveSheet().getDataRange().getValues())){
+  if (isValuesEmpty(doc.getActiveSheet().getDataRange().getValues())) {
     Browser.msgBox("No data provided in the spreadsheet.");
     return;
   }
 
   // Create window with title.
-  var app = UiApp.createApplication().setWidth('300').setHeight('80').setTitle('Mail Merge');
+  var appWidth = 300;
+  var appHeigh = 130;
+  var app = UiApp.createApplication().setWidth(appWidth).setHeight(appHeigh).setTitle('Mail Merge');
 
   // Fetch drafts from gmail account.
   var templates = GmailApp.search("in:drafts");
+
   // Fill-in listbox with items.
-  var listBox = app.createListBox().setName('templates').addItem('Select...');
+  var listBox = app.createListBox().setName('templates').setWidth(appWidth - (20 * 2)).addItem('Select...');
   for (i in templates) {
     listBox.addItem((parseInt(i) + 1) + '- ' + templates[i].getFirstMessageSubject().substr(0, 40));
   }
@@ -154,6 +191,15 @@ function startMailMerge() {
   // Create and assign onChange handler to get selected index.
   var ListBoxHandler = app.createServerChangeHandler('getSelectedTemplatesItem').addCallbackElement(listBox);
   listBox.addChangeHandler(ListBoxHandler);
+
+  // Create cookie textbox.
+  var textboxCookie = app.createTextBox().setName("cookie").setWidth(appWidth - (20 * 2));
+  var cookieValue = ScriptProperties.getProperty("gmailCookie");
+  if (cookieValue) {
+    textboxCookie.setValue(cookieValue);
+  }
+  var inputCookieHandler = app.createServerChangeHandler('getCookieFromTextbox').addCallbackElement(textboxCookie);
+  textboxCookie.addChangeHandler(inputCookieHandler);
 
   // Create run button.
   var buttonRun = app.createButton("Run Mail Merge").setId("buttonRun");
@@ -165,15 +211,21 @@ function startMailMerge() {
 
   // Create panel.
   var panel = app.createVerticalPanel().setId('panel');
+
   // Add all UI components to the panel.
   panel.add(app.createLabel('Select the template (from your drafts in Gmail)'));
   panel.add(listBox);
+  panel.add(app.createLabel('Paste GX cookie from Gmail (to retrieve inline attachments)'));
+  panel.add(textboxCookie);
+
   var buttonsPanel = app.createHorizontalPanel().setId('panelMailmergeButtons');
   buttonsPanel.add(buttonRun);
   buttonsPanel.add(buttonCancel);
   panel.add(buttonsPanel);
+
   // Add panel to app.
   app.add(panel);
+
   // Show window.
   doc.show(app);
 }
@@ -211,7 +263,6 @@ function closePanel() {
   return app;
 }
 
-
 /**
  * Listbox onChange callback for Templates.
  * Get selected Templates ListBox item.
@@ -219,6 +270,15 @@ function closePanel() {
 function getSelectedTemplatesItem(e) {
   // 'templates' in e.parameter.templates is the name of listbox.
   ScriptProperties.setProperty("selectedTemplate", e.parameter.templates);
+}
+
+/**
+ * Textbox onChange callback for cookie.
+ * Get Gmail Cookie from textfield.
+ */
+function getCookieFromTextbox(e) {
+  // 'templates' in e.parameter.templates is the name of listbox.
+  ScriptProperties.setProperty("gmailCookie", e.parameter.cookie);
 }
 
 /**
@@ -258,31 +318,30 @@ function populateContacts(e) {
     return;
   }
 
-  var rangeA1 =  dataSheet.getDataRange().getA1Notation();
-  var lastColumnName =rangeA1.split(':')[0].replace(/[0-9]+/g, '');
+  var rangeA1 = dataSheet.getDataRange().getA1Notation();
+  var lastColumnName = rangeA1.split(':')[0].replace(/[0-9]+/g, '');
   ss.toast(lastColumnName);
 
   // Check that columns names exist and add if they are not.
   columnNameRowNumber = 1;
-  if (dataSheet.getRange(firstsnameColumn + columnNameRowNumber).getValue() == ""){
+  if (dataSheet.getRange(firstsnameColumn + columnNameRowNumber).getValue() == "") {
     dataSheet.getRange(firstsnameColumn + columnNameRowNumber).setValue("First Name");
   }
 
-  if (dataSheet.getRange(lastnameColumn+ columnNameRowNumber).getValue() == ""){
+  if (dataSheet.getRange(lastnameColumn + columnNameRowNumber).getValue() == "") {
     dataSheet.getRange(lastnameColumn + columnNameRowNumber).setValue("Last Name");
   }
 
-  if (dataSheet.getRange(emailColumn+ columnNameRowNumber).getValue() == ""){
+  if (dataSheet.getRange(emailColumn + columnNameRowNumber).getValue() == "") {
     dataSheet.getRange(emailColumn + columnNameRowNumber).setValue("Email Address");
   }
-
 
   // Get contacts from Contacts.
   var contacts = ContactsApp.getContactGroup(groupName).getContacts();
 
   for (var i in contacts) {
     var emails = contacts[i].getEmails();
-    if (typeof emails === 'undefined' || emails.length === 0){
+    if (typeof emails === 'undefined' || emails.length === 0) {
       // Skip contacts with no emails.
       continue;
     }
@@ -296,12 +355,55 @@ function populateContacts(e) {
   }
 }
 
+function getInlineImages(rawContent) {
+  var url = /^https?:\/\//, cid = /^cid:/;
+  var imgtags = rawContent.match(/<img.*?>(.*?<\/img>)?/gi);
+  return imgtags ? imgtags.map(function (imgTag) {
+    var img = {src: Xml.parse(imgTag, true).html.body.img.src};
+    img.blob = url.test(img.src) ? UrlFetchApp.fetch(img.src).getBlob()
+      : cid.test(img.src) ? getBlobFromMessage(rawContent, img.src)
+      : null;
+    return img;
+  }) : [];
+}
+
+function getBlobFromMessage(rawContent, src) {
+  var cidIndex = src.search(/cid:/i);
+  if (cidIndex === -1) {
+    throw Utilities.formatString("Did not find cid: prefix for inline refenece: %s", src)
+  }
+
+  var itemId = src.substr(cidIndex + 4);
+  var contentIdIndex = rawContent.search("Content-ID:.*?" + itemId);
+  if (contentIdIndex === -1) {
+    throw Utilities.formatString("Item with ID %s not found.", src);
+  }
+
+  var previousBoundaryIndex = rawContent.lastIndexOf("\r\n--", contentIdIndex);
+  var nextBoundaryIndex = rawContent.indexOf("\r\n--", previousBoundaryIndex + 1);
+  var part = rawContent.substring(previousBoundaryIndex, nextBoundaryIndex);
+
+  var contentTransferEncodingLine = part.match(/Content-Transfer-Encoding:.*?\r\n/i)[0];
+  var encoding = contentTransferEncodingLine.split(":")[1].trim();
+  if (encoding != "base64") {
+    throw Utilities.formatString("Unhandled encoding type: %s", encoding);
+  }
+
+  var contentTypeLine = part.match(/Content-Type:.*?\r\n/i)[0];
+  var contentType = contentTypeLine.split(":")[1].split(";")[0].trim();
+
+  var startOfBlob = part.indexOf("\r\n\r\n");
+  var blobText = part.substring(startOfBlob).replace("\r\n", "");
+  return Utilities.newBlob(Utilities.base64Decode(blobText), contentType, itemId);
+}
+
 /**
  * Send emails callback.
  * The core.
  */
 function sendEmails(e) {
   var app = UiApp.getActiveApplication();
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var selectedTemplate = ScriptProperties.getProperty("selectedTemplate");
   if (selectedTemplate == 'Select...') {
@@ -350,48 +452,81 @@ function sendEmails(e) {
   var templateBody = foundTemplate.getBody();
   // Get all template attachments, including inline images.
   var templateAttachments = foundTemplate.getAttachments();
+
   // Notify user that sending is in progress.
   ss.toast('Sending messages.Do not make any changes to spreadsheet until complete.', 'Mail Merge', -1);
 
   // Searching for inline images.
-  // Known issue: The code below will work only if added inline images were not
-  // removed from the body. If at least 1 inline image gets removed - all inline
-  // images will be randomized. This happens due to templateAttachments holding
-  // all inline images, including removed ones.
-  // TODO: identify removed images and clean up templateAttachments
 
   // Create template reg exp to locate all images within the body.
   var templateRegExp = new RegExp(foundTemplate.getId(), "g");
   if (templateBody.match(templateRegExp) != null) {
-    // Get inline images count.
-    var imgCount = templateBody.match(templateRegExp).length;
     var imgTags = templateBody.match(/<img[^>]+>/g);
     var imgToReplace = [];
+
     for (var i = 0; i < imgTags.length; i++) {
       if (imgTags[i].search(templateRegExp) != -1) {
         var imgId = imgTags[i].match(/Inline\simage[s]?\s(\d)/);
         imgToReplace.push([parseInt(imgId[1]), imgTags[i]]);
       }
     }
-    // Sort array of images to be replaced.
+
+    // Sort array of images to be replaced by image id.
     imgToReplace.sort(function (a, b) {
       return a[0] - b[0];
     });
 
-    var inlineImages = {};
     // Replacing images and removing attachments.
+    var inlineImages = {};
     for (var i = 0; i < imgToReplace.length; i++) {
       // Get current attachment id.
-      var attId = i + (templateAttachments.length - imgCount);
+      var attId = i + (templateAttachments.length);
+
       // Provide replacement title.
-      var title = 'InlineImages' + i;
-      inlineImages[title] = templateAttachments[attId].copyBlob().setName(title);
-      // Remove inline image attachment from attachments list.
-      templateAttachments.splice(attId, 1);
+      var title = 'InlineImages' + imgToReplace[i][0];
+      var tag = imgToReplace[i][1];
+
+      var matches = tag.match(/src="([^"]*)"/i);
+      var url = matches[1];
+
+      // Normalise ampersands.
+      url = url.replace(/&amp;/g, '&');
+
+      // If this matches, that means this was copied and pasted from a browser and it's a
+      // standard URL that we can urlFetch
+      if (/^https*\:\/\/.*$/.exec(url)) {
+        // NO OP!
+      }
+      else {
+        var pat2 = /realattid=([^&]+)/;
+        if (url.match(pat2)) {
+          var match_p2 = url.match(pat2);
+          title = match_p2[1];
+        }
+        // Else this means the user copied and pasted from an OS clipboard and the image
+        // exists on Google's servers. The image can only be retrieved when logged in. Fortunately,
+        // if we use URLFetchApp, this will act as a logged in user and be able to URLFetch the image.
+        // We'll need to prepend a Gmail URL (subject to change)
+        url = "https://mail.google.com/mail/u/0/" + url;
+      }
+
+      // If cookie was not set in UI - attachments won't be retrieved.
+      var gmailCookie = ScriptProperties.getProperty("gmailCookie");
+      var options = {
+        headers: {
+          Cookie: gmailCookie
+        }
+      };
+
+      var response = UrlFetchApp.fetch(url, options);
+
+      inlineImages[title] = response.getBlob().setName(title);
+
       // Create new img tag  - replace src attribute and value for image.
-      var newImg = imgToReplace[i][1].replace(/src="[^\"]+\"/, "src=\"cid:" + title + "\"");
+      var newImg = tag.replace(/src="[^\"]+\"/, "src=\"cid:" + title + "\"");
+
       // Replace whole img tag with a new one.
-      templateBody = templateBody.replace(imgToReplace[i][1], newImg);
+      templateBody = templateBody.replace(tag, newImg);
     }
   }
 
@@ -413,7 +548,9 @@ function sendEmails(e) {
       GmailApp.sendEmail(rowData.emailAddress, emailSubject, emailText, {
         attachments: templateAttachments,
         htmlBody: emailText,
+
         inlineImages: inlineImages
+
       });
       // Fill-in 'Email status' and 'Sent timestamp'.
       dataSheet.getRange(i + 2, dataSheet.getLastColumn() - 1).setValue("Email sent");
@@ -442,7 +579,7 @@ function sendEmails(e) {
  */
 function fillInTemplateFromObject(template, data) {
   var body = template;
-  var pattern=regExpQuote(placeholder_start)+"[^"+regExpQuote(placeholder_start)+"]+"+regExpQuote(placeholder_finish);
+  var pattern = regExpQuote(placeholder_start) + "[^" + regExpQuote(placeholder_start) + "]+" + regExpQuote(placeholder_finish);
   var tokens = template.match(new RegExp(pattern, "ig"));
   if (tokens != null) {
     // Replace variables from the template with the actual values from the data object.
@@ -559,32 +696,31 @@ function normalizeHeader(header) {
  * @return {Boolean}
  */
 function isCellEmpty(cellData) {
-  return typeof(cellData) == "string" && (cellData == "" || cellData.replace(/^\s+|\s+$/g,'') == "");
+  return typeof(cellData) == "string" && (cellData == "" || cellData.replace(/^\s+|\s+$/g, '') == "");
 }
 
 /**
  * Checks that all values in provided array are empty.
  * @param values
  */
-function isValuesEmpty(values){
+function isValuesEmpty(values) {
   var empty = true;
-  for (var i in values){
-    if (typeof values[i] === 'array' || typeof values[i] === 'object'){
+  for (var i in values) {
+    if (typeof values[i] === 'array' || typeof values[i] === 'object') {
       empty = isValuesEmpty(values[i]);
     }
-    else{
-      if (!isCellEmpty(values[i])){
+    else {
+      if (!isCellEmpty(values[i])) {
         empty = false;
       }
     }
     // If at least one is not empty - quit.
-    if (!empty){
+    if (!empty) {
       return empty;
     }
   }
   return empty;
 }
-
 
 /**
  * Returns true if the character char is alphabetical, false otherwise.
@@ -601,7 +737,6 @@ function isAlnum(char) {
 function isDigit(char) {
   return char >= '0' && char <= '9';
 }
-
 
 /**
  * Search for value in the range and return range of first occurence
@@ -653,6 +788,6 @@ function toArray(obj) {
 /**
  * Escape character for regexp.
  */
-function regExpQuote (str) {
+function regExpQuote(str) {
   return str.replace(/([.?*+^$[\]\\(){}|-])/g, "\\$1");
 };
