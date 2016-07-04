@@ -242,17 +242,6 @@ function cancelSend() {
   return app;
 }
 
-/**
- * Cancel button callback.
- * Close app window and show cancellation toast.
- */
-function cancelSend() {
-  var app = UiApp.getActiveApplication();
-  app.close();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ss.toast('Mail Merge was cancelled. No messages were sent.', 'Mail Merge', 5);
-  return app;
-}
 
 /**
  * Close panel button callback.
@@ -430,7 +419,7 @@ function sendEmails(e) {
   var headers = headersRange.getValues();
   var emailColumnFound = false;
   for (i in headers[0]) {
-    if (headers[0][i] == "Email Address") {
+    if (headers[0][i].toLowerCase() == "email address" || headers[0][i].toLowerCase() == "email") {
       emailColumnFound = true;
     }
   }
